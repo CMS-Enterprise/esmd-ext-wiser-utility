@@ -28,15 +28,15 @@ public class Notification {
     }
 
     private String status;
-    public String getFileName() {
-        return fileName;
+    public String getFilename() {
+        return filename;
     }
 
-    public void setFileName(String fileName) {
-        this.fileName = fileName;
+    public void setFilename(String filename) {
+        this.filename = filename;
     }
 
-    private String fileName;
+    private String filename;
     private ArrayList<ErrorMessage> errorMessages;
 
     public String getEsMDTransactionId() {

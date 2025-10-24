@@ -35,7 +35,7 @@ public class NotificationsImpl {
 
     private static final Logger logger = LoggerFactory.getLogger(gov.cms.esmd.rc.impl.DownloadImpl.class);
     private final Properties apiProperties;
-    private static final String DATE_FORMAT = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX";
+    private static final String DATE_FORMAT = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSXXX";
     /**
      * Constructs a new NotificationsImpl instance.
      * Loads the API properties from the YAML configuration file.
@@ -124,7 +124,7 @@ public class NotificationsImpl {
 
         notification.setPickupTime(formattedDate);
         notification.setSubmissionTime(formattedDate);
-        notification.setFileName(filename);
+        notification.setFilename(filename);
         notification.setEsMDTransactionId(esMDTransactionId);
         notification.setStatus("SUCCESS");
         notification.setErrorMessages(new ArrayList<>());
