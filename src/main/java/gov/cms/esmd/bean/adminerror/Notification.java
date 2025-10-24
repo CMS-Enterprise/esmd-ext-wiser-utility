@@ -7,9 +7,18 @@ import java.util.Date;
 
 public class Notification {
     private String esMDTransactionId;
-    private Date creationTime;
-    private Date submissionTime;
+    private String creationTime;
+    private String submissionTime;
 
+    public String getPickupTime() {
+        return pickupTime;
+    }
+
+    public void setPickupTime(String pickupTime) {
+        this.pickupTime = pickupTime;
+    }
+
+    private String pickupTime;
     public String getStatus() {
         return status;
     }
@@ -38,19 +47,19 @@ public class Notification {
         this.esMDTransactionId = esMDTransactionId;
     }
 
-    public Date getCreationTime() {
+    public String getCreationTime() {
         return creationTime;
     }
 
-    public void setCreationTime(Date creationTime) {
+    public void setCreationTime(String creationTime) {
         this.creationTime = creationTime;
     }
 
-    public Date getSubmissionTime() {
+    public String getSubmissionTime() {
         return submissionTime;
     }
 
-    public void setSubmissionTime(Date submissionTime) {
+    public void setSubmissionTime(String submissionTime) {
         this.submissionTime = submissionTime;
     }
 
