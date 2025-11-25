@@ -7,7 +7,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class StatusDetail {
+    public String getNotificationType() {
+        return notificationType;
+    }
 
+    public void setNotificationType(String notificationType) {
+        this.notificationType = notificationType;
+    }
+
+    private  String notificationType;
     private String esMDTransactionId;
     private String contenttypecd;
     private String parentTransactionId;
