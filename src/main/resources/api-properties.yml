@@ -2,9 +2,9 @@ application:
   name: esmd-wiser-utility
   linesofbusinessid: 19
 userinfo:
-  mailboxid: WSDEV01
-  clientid: 76qcaktb31oi25jq5qffbddnmi
-  clientsecret: 1dmg83bhu347lsvk6k8aqddu0sqnskeumk7dsoamtpk79kgh817i
+  mailboxid: WSDEV101
+  clientid: 57l6ji6uldkijb90gvebdbnaek
+  clientsecret: 1mser52polmh7nvcj0m13o06hbg16sjhe9pgfehu3qu0578c8spn
 
 
 api:
@@ -35,7 +35,9 @@ api:
     partsize: 200857600
   notification:
     pickup: PICKUP
-
+  token:
+    expires-in-secs: 3600
+    expiry-buffer-in-mins: 5
 errorCodes:
   NOTIFICATION_TYPE_MISSING_ERR_CD: "Notification type is missing or null."
   SENDER_ROUTING_ID_MISSING_ERR_CD: "Sender Routing ID is missing or null."

@@ -316,6 +316,10 @@ For support and questions:
   - Security utilities
   - Comprehensive testing
 
+- **v2.0-SNAPSHOT**: Enhanced the Auth API to reuse token
+    - The access token retrieved in the AuthAPIClient is cached for reuse. If the token is expired or within the configured expiry buffer window specified 
+      in the api.properties file, a new token is obtained from the Auth API and cached for subsequent requests. The implementation is thread-safe and ensures 
+      that only one thread refreshes the token at a time.
 ---
 
 **Note**: This utility is designed for use with the CMS esMD system. Ensure you have proper authorization and credentials before using in production environments.
