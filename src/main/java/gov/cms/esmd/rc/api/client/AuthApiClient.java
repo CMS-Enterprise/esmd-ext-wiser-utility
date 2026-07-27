@@ -18,7 +18,10 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Properties;
-
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.util.concurrent.locks.ReentrantLock;
 /**
  * AuthApiClient
  *
@@ -60,6 +63,12 @@ public class AuthApiClient implements Closeable {
     private final String clientId;
     private final String clientSecret;
 
+    private long  defaultExpiresInSeconds;
+    private long  expiryBufferMinutes;
+
+    private static final ReentrantLock TOKEN_LOCK = new ReentrantLock();
+    private static volatile CachedToken cachedToken;
+
     public AuthApiClient(String env) {
         SecurityUtils.validateAlphanumeric(env, "Environment");
 
@@ -71,7 +80,11 @@ public class AuthApiClient implements Closeable {
         this.mailboxId   = getRequiredProp(KEY_MAILBOX_ID, "Missing mailbox id property");
         this.clientId    = getRequiredProp(KEY_CLIENT_ID, "Missing client id property");
         this.clientSecret= getRequiredProp(KEY_CLIENT_SECRET, "Missing client secret property");
+        this. defaultExpiresInSeconds = Long.parseLong(
+                apiProperties.getProperty("api.token.expires-in-secs", "3600"));
 
+        this. expiryBufferMinutes = Long.parseLong(
+                apiProperties.getProperty("api.token.expiry-buffer-in-mins", "5"));
         int connectTimeout = getIntProp(KEY_CONNECT_TIMEOUT, DEF_CONNECT_TIMEOUT_MS);
         int socketTimeout  = getIntProp(KEY_SOCKET_TIMEOUT,  DEF_SOCKET_TIMEOUT_MS);
         int connReqTimeout = getIntProp(KEY_CONN_REQ_TIMEOUT, DEF_CONN_REQ_TIMEOUT_MS);
@@ -91,14 +104,70 @@ public class AuthApiClient implements Closeable {
     }
 
     /**
+     * GRetrieves an OAuth access token from the Auth API and caches it for reuse.
+     *  A cached token is reused whenever possible. If the token is expired
+     *  or within the configured expiry buffer window, a new token is obtained
+     *  from the Auth API and cached for subsequent requests. The implementation
+     *  is thread-safe and ensures that only one thread refreshes the token at a time.
+     * @param scope OAuth scope for the requested token
+     * @return AuthResponse containing the access token
+     * @throws IllegalStateException if the token cannot be obtained
+     */
+    public AuthResponse getToken(String scope) {
+        SecurityUtils.validateNotNullOrEmpty(scope, "Scope");
+        CachedToken currentToken = cachedToken;
+
+        if (currentToken != null && !isExpiringSoon(currentToken)) {
+            log.info("Using cached Auth token. Token hash={}, Expires at={}",
+                    Integer.toHexString(currentToken.getAuthResponse().getAccess_token().hashCode()),
+                    currentToken.getExpiryTime().atZone(ZoneId.of("America/New_York")));
+            return currentToken.getAuthResponse();
+        }
+
+        TOKEN_LOCK.lock();
+        try {
+            currentToken = cachedToken;
+
+            if (currentToken != null && !isExpiringSoon(currentToken)) {
+                log.info("Using cached Auth token after lock. Token hash={}, Expires at={}",
+                        Integer.toHexString(currentToken.getAuthResponse().getAccess_token().hashCode()),
+                        currentToken.getExpiryTime().atZone(ZoneId.of("America/New_York")));
+                return currentToken.getAuthResponse();
+            }
+
+            log.info("Fetching new Auth token from Auth API. Scope={}", scope);
+
+            AuthResponse freshResponse = fetchTokenFromAuthApi(scope);
+
+            long expiresInSeconds = freshResponse.getExpires_in() > 0
+                    ? freshResponse.getExpires_in()
+                    : defaultExpiresInSeconds;
+
+            cachedToken = new CachedToken(
+                    freshResponse,
+                    Instant.now().plusSeconds(expiresInSeconds)
+            );
+
+            log.info("Cached token. Expires at={}",
+                    cachedToken.getExpiryTime().atZone(ZoneId.of("America/New_York")));
+            log.info("Token hash={}",
+                    Integer.toHexString(
+                            cachedToken.getAuthResponse().getAccess_token().hashCode()));
+            return freshResponse;
+
+        } finally {
+            TOKEN_LOCK.unlock();
+        }
+    }
+
+    /**
      * Get an access token for the requested scope.
      *
      * @param scope required API scope (e.g., "rc/upload")
      * @return AuthResponse; on HTTP non-200 returns an object with error set; on a malformed success body throws
      */
-    public AuthResponse getToken(String scope) {
-        SecurityUtils.validateNotNullOrEmpty(scope, "Scope");
 
+    private AuthResponse fetchTokenFromAuthApi(String scope) {
         log.debug("Auth token request: mailboxId={}, clientId={}", mailboxId, mask(clientId));
 
         HttpPost request = new HttpPost(authUrl);
@@ -107,50 +176,53 @@ public class AuthApiClient implements Closeable {
         request.addHeader("clientsecret", clientSecret);
         request.addHeader("scope", scope);
         request.addHeader("mailboxid", mailboxId);
-        
-        // Add security headers
         request.addHeader("User-Agent", "esmd-wiser-utility/1.0");
         request.addHeader("Accept", "application/json");
 
         try {
             try (org.apache.http.client.methods.CloseableHttpResponse response = httpClient.execute(request)) {
                 int status = response.getStatusLine().getStatusCode();
-                String body = (response.getEntity() != null)
+                String body = response.getEntity() != null
                         ? EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8)
                         : "";
 
                 if (status != 200) {
-                    // Try to parse a structured error, but always return an AuthResponse with an error message
                     ErrorResponse er = tryParse(body, ErrorResponse.class);
+
                     AuthResponse ar = new AuthResponse();
                     ar.setStatusCode(String.valueOf(status));
-                    ar.setError(er != null && !isBlank(er.getError()) ? er.getError()
+                    ar.setError(er != null && !isBlank(er.getError())
+                            ? er.getError()
                             : "Request failed with status " + status);
+
                     log.warn("Auth token request failed: status={}, error={}", status, ar.getError());
                     return ar;
                 }
 
                 AuthResponse auth = JSONUtility.deserialize(body, AuthResponse.class);
-                // Validate a "successful" body still has a token and no error
+
                 if (auth == null || !isBlank(auth.getError()) || isBlank(auth.getAccess_token())) {
-                    String msg = "Authentication failed: invalid success response (missing token or error present)";
+                    String msg = "Authentication failed: invalid success response";
                     log.error("{} body(snippet)={}", msg, snippet(body));
                     throw new IllegalStateException(msg);
                 }
 
-                // Normalize Authorization header format for callers that want it directly
                 auth.setAccess_token("Bearer " + auth.getAccess_token());
-                log.debug("Auth token acquired successfully");
+
+                log.info("Auth token acquired successfully. expires_in={}", auth.getExpires_in());
                 return auth;
             }
+
         } catch (IOException io) {
             log.error("I/O error during auth request: {}", io.getMessage(), io);
             throw new IllegalStateException("I/O error during auth request", io);
-        } catch (RuntimeException re) {
-            // Preserve stack and add context
-            log.error("Unexpected error during auth: {}", re.getMessage(), re);
-            throw re;
         }
+    }
+
+    private boolean isExpiringSoon(CachedToken token) {
+        return token == null
+                || token.getExpiryTime() == null
+                || token.getExpiryTime().minus(Duration.ofMinutes(expiryBufferMinutes)).isBefore(Instant.now());
     }
 
     @Override
@@ -200,11 +272,35 @@ public class AuthApiClient implements Closeable {
         int max = 512;
         return s.length() <= max ? s : s.substring(0, max) + "...(truncated)";
     }
+    private static class CachedToken {
+        private final AuthResponse authResponse;
+        private final Instant expiryTime;
 
-    public static void main(String[] args) {
+        private CachedToken(AuthResponse authResponse, Instant expiryTime) {
+            this.authResponse = authResponse;
+            this.expiryTime = expiryTime;
+        }
+
+        private AuthResponse getAuthResponse() {
+            return authResponse;
+        }
+
+        private Instant getExpiryTime() {
+            return expiryTime;
+        }
+    }
+    public static void main(String[] args) throws  Exception {
         AuthApiClient authApiClient = new AuthApiClient("dev") ;
-        AuthResponse authResponse= authApiClient.getToken("wiser/download");
-        log.info("Token - , {}", authResponse.getAccess_token());
+
+        System.out.println("Call 1");
+        authApiClient.getToken("wiser/download");
+        Thread.sleep(9*1000);
+        System.out.println("Call 2");
+        authApiClient.getToken("wiser/download");
+        Thread.sleep(20*1000);
+        System.out.println("Call 3");
+        authApiClient.getToken( "wiser/download");
+
     }
 }
 

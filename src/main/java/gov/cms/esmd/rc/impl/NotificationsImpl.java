@@ -7,15 +7,11 @@ import gov.cms.esmd.bean.auth.response.AuthResponse;
 import gov.cms.esmd.bean.response.*;
 import gov.cms.esmd.rc.api.client.AuthApiClient;
 import gov.cms.esmd.rc.api.client.NotificationApiClient;
-import gov.cms.esmd.utility.NotificationUtility;
 import gov.cms.esmd.utility.PropertiesUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;

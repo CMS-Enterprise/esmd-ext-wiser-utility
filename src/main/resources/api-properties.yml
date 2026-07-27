@@ -35,7 +35,9 @@ api:
     partsize: 200857600
   notification:
     pickup: PICKUP
-
+  token:
+    expires-in-secs: 3600
+    expiry-buffer-in-mins: 5
 errorCodes:
   NOTIFICATION_TYPE_MISSING_ERR_CD: "Notification type is missing or null."
   SENDER_ROUTING_ID_MISSING_ERR_CD: "Sender Routing ID is missing or null."

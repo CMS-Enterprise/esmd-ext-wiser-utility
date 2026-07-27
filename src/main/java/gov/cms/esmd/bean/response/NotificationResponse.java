@@ -3,18 +3,9 @@ package gov.cms.esmd.bean.response;
 import java.util.ArrayList;
 
 public class NotificationResponse {
-    private String senderRoutingID;
     private String message;
     private String senderRoutingId;
     private ArrayList<StatusDetail> statusDetails;
-
-    public String getSenderRoutingID() {
-        return senderRoutingID;
-    }
-
-    public void setSenderRoutingID(String senderRoutingID) {
-        this.senderRoutingID = senderRoutingID;
-    }
 
     public String getMessage() {
         return message;
